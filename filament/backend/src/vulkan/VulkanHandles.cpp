@@ -331,6 +331,7 @@ VulkanTexture::VulkanTexture(VulkanContext& context, SamplerType target, uint8_t
     if (error) {
         utils::slog.d << "vkCreateImage: "
             << "result = " << error << ", "
+            << "handle = " << utils::io::hex << textureImage << utils::io::dec << ", "
             << "extent = " << w << "x" << h << "x"<< depth << ", "
             << "mipLevels = " << int(levels) << ", "
             << "format = " << vkformat << utils::io::endl;
@@ -418,7 +419,7 @@ void VulkanTexture::update2DImage(const PixelBufferDescriptor& data, uint32_t wi
                 miplevel);
         transitionImageLayout(commands.cmdbuffer, textureImage,
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, miplevel, 1);
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, miplevel, 1); // what if it needs to transition to VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL?
 
         mStagePool.releaseStage(stage, commands);
     };

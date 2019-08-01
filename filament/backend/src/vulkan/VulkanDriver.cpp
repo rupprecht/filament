@@ -676,23 +676,23 @@ void VulkanDriver::beginRenderPass(Handle<HwRenderTarget> rth,
     const auto depth = rt->getDepth();
     const bool hasColor = color.format != VK_FORMAT_UNDEFINED;
     const bool hasDepth = depth.format != VK_FORMAT_UNDEFINED;
-    const bool depthOnly = hasDepth && !hasColor;
 
     mDisposer.acquire(rt, mContext.currentCommands->resources);
     mDisposer.acquire(color.offscreen, mContext.currentCommands->resources);
     mDisposer.acquire(depth.offscreen, mContext.currentCommands->resources);
 
-    VkImageLayout finalLayout;
+    VkImageLayout finalColorLayout;
+    VkImageLayout finalDepthLayout;
     if (!rt->isOffscreen()) {
-        finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    } else if (depthOnly) {
-        finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        finalDepthLayout = finalColorLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     } else {
-        finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        finalColorLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        finalDepthLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
     }
 
     VkRenderPass renderPass = mFramebufferCache.getRenderPass({
-        .finalLayout = finalLayout,
+        .finalColorLayout = finalColorLayout,
+        .finalDepthLayout = finalDepthLayout,
         .colorFormat = color.format,
         .depthFormat = depth.format,
         .flags.clear         = params.flags.clear,
@@ -705,10 +705,10 @@ void VulkanDriver::beginRenderPass(Handle<HwRenderTarget> rth,
     VulkanFboCache::FboKey fbo { .renderPass = renderPass };
     int numAttachments = 0;
     if (hasColor) {
-      fbo.attachments[numAttachments++] = color.view;
+        fbo.attachments[numAttachments++] = color.view;
     }
     if (hasDepth) {
-      fbo.attachments[numAttachments++] = depth.view;
+        fbo.attachments[numAttachments++] = depth.view;
     }
 
     VkRenderPassBeginInfo renderPassInfo {
@@ -1084,6 +1084,15 @@ void VulkanDriver::draw(PipelineState pipelineState, Handle<HwRenderPrimitive> r
             VkSampler vksampler = mSamplerCache.getSampler(samplerParams);
             const auto* texture = handle_const_cast<VulkanTexture>(mHandleMap, boundSampler->t);
             mDisposer.acquire(texture, commands->resources);
+#ifndef NDEBUG
+            utils::slog.e << "Program: " << program->name.c_str() << utils::io::endl;
+            ASSERT_POSTCONDITION_NON_FATAL(
+                    mCurrentRenderTarget->getColor().image != texture->textureImage,
+                    "Attempting to sample color from the render target");
+            ASSERT_POSTCONDITION_NON_FATAL(
+                    mCurrentRenderTarget->getDepth().image != texture->textureImage,
+                    "Attempting to sample depth from the render target");
+#endif
             mBinder.bindSampler(bindingPoint, {
                 .sampler = vksampler,
                 .imageView = texture->imageView,
