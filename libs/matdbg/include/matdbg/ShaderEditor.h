@@ -14,36 +14,31 @@
  * limitations under the License.
  */
 
-#ifndef MATDBG_SHADEREXTRACTOR_H
-#define MATDBG_SHADEREXTRACTOR_H
+#ifndef MATDBG_SHADEREDITOR_H
+#define MATDBG_SHADEREDITOR_H
 
 #include <filaflat/ChunkContainer.h>
 #include <filaflat/MaterialChunk.h>
-#include <filaflat/ShaderBuilder.h>
 
 #include <backend/DriverEnums.h>
-
-#include <utils/CString.h>
 
 namespace filament {
 namespace matdbg {
 
-// ShaderExtractor is a utility class for extracting shader source from a material package.
-// See also ShaderEditor.
-class ShaderExtractor {
+// ShaderEditor is a utility class for editing shader source within a material package.
+// See also ShaderExtractor.
+class ShaderEditor {
 public:
-    ShaderExtractor(backend::Backend backend, const void* data, size_t size);
-    bool parse() noexcept;
-    bool isShadingMaterial() const noexcept;
-    bool isPostProcessMaterial() const noexcept;
-    bool getShader(backend::ShaderModel shaderModel,
-            uint8_t variant, backend::ShaderType stage, filaflat::ShaderBuilder& shader) noexcept;
-
-    static utils::CString spirvToGLSL(const uint32_t* data, size_t wordCount);
-    static utils::CString spirvToText(const uint32_t* data, size_t wordCount);
-
+    ShaderEditor(backend::Backend backend, const void* data, size_t size);
+    ~ShaderEditor();
+    bool applyShaderEdit(backend::ShaderModel shaderModel, uint8_t variant,
+            backend::ShaderType stage, const char* source);
+    const uint8_t* getEditedPackage() const;
+    size_t getEditedSize() const;
 private:
-    filaflat::ChunkContainer mChunkContainer;
+    backend::Backend mBackend;
+    filaflat::ChunkContainer mOriginalPackage;
+    filaflat::ChunkContainer* mEditedPackage = nullptr;
     filaflat::MaterialChunk mMaterialChunk;
     filamat::ChunkType mMaterialTag = filamat::ChunkType::Unknown;
     filamat::ChunkType mDictionaryTag = filamat::ChunkType::Unknown;
@@ -52,4 +47,4 @@ private:
 } // namespace matdbg
 } // namespace filament
 
-#endif  // MATDBG_SHADEREXTRACTOR_H
+#endif  // MATDBG_SHADEREDITOR_H

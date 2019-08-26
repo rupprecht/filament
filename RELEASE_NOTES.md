@@ -3,6 +3,8 @@
 This file contains one line summaries of commits that are worthy of mentioning in release notes.
 A new header is inserted each time a *tag* is created.
 
+- The web-based material inspector now allows editing shader code.
+
 ## v1.3.2
 
 - Added optional web server for real-time inspection of shader code.

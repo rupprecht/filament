@@ -24,7 +24,7 @@
 #include <spirv_glsl.hpp>
 #include <spirv-tools/libspirv.h>
 
-#include <matdbg/PackageEditor.h>
+#include <matdbg/ShaderEditor.h>
 #include <matdbg/ShaderExtractor.h>
 #include <matdbg/ShaderInfo.h>
 #include <matdbg/JsonWriter.h>
@@ -204,13 +204,6 @@ public:
         }
 
         if (glindex[0]) {
-            ShaderExtractor extractor(Backend::OPENGL, result->package, result->packageSize);
-            if (!extractor.parse() ||
-                    (!extractor.isShadingMaterial() && !extractor.isPostProcessMaterial())) {
-                return error(__LINE__);
-            }
-
-            filaflat::ShaderBuilder builder;
             std::vector<ShaderInfo> info(getShaderCount(package, ChunkType::MaterialGlsl));
             if (!getGlShaderInfo(package, info.data())) {
                 return error(__LINE__);
@@ -221,7 +214,14 @@ public:
                 return error(__LINE__);
             }
 
+            ShaderExtractor extractor(Backend::OPENGL, result->package, result->packageSize);
+            if (!extractor.parse() ||
+                    (!extractor.isShadingMaterial() && !extractor.isPostProcessMaterial())) {
+                return error(__LINE__);
+            }
+
             const auto& item = info[shaderIndex];
+            filaflat::ShaderBuilder builder;
             extractor.getShader(item.shaderModel, item.variant, item.pipelineStage, builder);
 
             mg_printf(conn, kSuccessHeader.c_str(), "application/txt");
@@ -408,33 +408,65 @@ const DebugServer::MaterialRecord* DebugServer::getRecord(const MaterialKey& key
 }
 
 bool DebugServer::applyShaderEdit(const MaterialKey& key, int api, int shader, const char* source) {
+    const auto error = [](int line) {
+        slog.e << "DebugServer: Unable to apply shader edit at " <<  line << io::endl;
+        return false;
+    };
+
     if (mMaterialRecords.find(key) == mMaterialRecords.end()) {
-        slog.e << "Unable to find material:" << utils::io::hex << key << utils::io::dec << io::endl;
-        return false;
+        return error(__LINE__);
     }
-    MaterialRecord& info = mMaterialRecords[key];
-    filaflat::ChunkContainer oldPackage(info.package, info.packageSize);
-
-    // ALREADY PARSED.
-    //
-    // if (oldPackage.parse()) {
-    //     slog.e << "Unable to parse material." << io::endl;
-    //     return false;
-    // }
-
-    PackageEditor editor(oldPackage);
-    if (!editor.applyShaderEdit(api, shader, source)) {
-        slog.e << "Unable to apply edit." << io::endl;
-        return false;
+    MaterialRecord& material = mMaterialRecords[key];
+    filaflat::ChunkContainer package(material.package, material.packageSize);
+    if (!package.parse()) {
+        return error(__LINE__);
     }
 
-    delete [] info.package;
+    backend::Backend apiType = (backend::Backend) api;
+    ShaderInfo info;
+    switch (apiType) {
+        case backend::Backend::OPENGL: {
+            const size_t shaderCount = getShaderCount(package, ChunkType::MaterialGlsl);
+            std::vector<ShaderInfo> infos(shaderCount);
+            if (!getGlShaderInfo(package, infos.data())) {
+                return error(__LINE__);
+            }
+            info = infos[shader];
+            break;
+        }
+        case backend::Backend::VULKAN:
+            const size_t shaderCount = getShaderCount(package, ChunkType::MaterialSpirv);
+            std::vector<ShaderInfo> infos(shaderCount);
+            if (!getVkShaderInfo(package, infos.data())) {
+                return error(__LINE__);
+            }
+            info = infos[shader];
+            break;
+        case backend::Backend::METAL:
+            const size_t shaderCount = getShaderCount(package, ChunkType::MaterialMetal);
+            std::vector<ShaderInfo> infos(shaderCount);
+            if (!getMetalShaderInfo(package, infos.data())) {
+                return error(__LINE__);
+            }
+            info = infos[shader];
+            break;
+        default:
+            error(__LINE__);
+    }
 
-    info.package = editor.getEditedPackage();
-    info.packageSize = editor.getEditedSize();
+
+    ShaderEditor editor(apiType, package.getData(), package.getSize());
+    if (!editor.applyShaderEdit(info.shaderModel, info.variant, info.pipelineStage, source)) {
+        return error(__LINE__);
+    }
+
+    delete [] material.package;
+
+    material.package = editor.getEditedPackage();
+    material.packageSize = editor.getEditedSize();
 
     if (mEditCallback) {
-        mEditCallback(info.userdata, info.name, info.package, info.packageSize);
+        mEditCallback(material.userdata, material.name, material.package, material.packageSize);
     }
 
     return true;

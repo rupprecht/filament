@@ -17,6 +17,7 @@
 #ifndef MATDBG_DEBUGSERVER_H
 #define MATDBG_DEBUGSERVER_H
 
+#include <utils/compiler.h>
 #include <utils/CString.h>
 
 #include <tsl/robin_map.h>
@@ -68,7 +69,8 @@ private:
     const MaterialRecord* getRecord(const MaterialKey& key) const;
     bool applyShaderEdit(const MaterialKey& mat, int api, int shader, const char* source);
 
-    const ServerMode mServerMode;
+    UTILS_UNUSED const ServerMode mServerMode;
+
     CivetServer* mServer;
     tsl::robin_map<MaterialKey, MaterialRecord> mMaterialRecords;
     utils::CString mHtml;
