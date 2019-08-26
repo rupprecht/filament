@@ -59,13 +59,14 @@ private:
 
     struct MaterialRecord {
         void* userdata;
-        uint8_t* package;
+        const uint8_t* package;
         size_t packageSize;
         utils::CString name;
         MaterialKey key;
     };
 
     const MaterialRecord* getRecord(const MaterialKey& key) const;
+    bool applyShaderEdit(const MaterialKey& mat, int api, int shader, const char* source);
 
     const ServerMode mServerMode;
     CivetServer* mServer;

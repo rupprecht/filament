@@ -18,7 +18,8 @@ const kMonacoBaseUrl = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.1
 
 const materialList = document.getElementById("material-list");
 const materialDetail = document.getElementById("material-detail");
-const footer = document.getElementsByTagName("footer")[0];
+const header = document.querySelector("header");
+const footer = document.querySelector("footer");
 const shaderSource = document.getElementById("shader-source");
 const matDetailTemplate = document.getElementById("material-detail-template");
 const matListTemplate = document.getElementById("material-list-template");
@@ -30,6 +31,7 @@ let gEditor = null;
 let gCurrentMaterial = "00000000";
 let gCurrentShader = { matid: "00000000", glindex: -1, vkindex: -1, metalindex: -1 };
 let gCurrentSocketId = 0;
+let gEditorIsLoading = false;
 
 require.config({ paths: { "vs": `${kMonacoBaseUrl}vs` }});
 
@@ -62,6 +64,16 @@ document.querySelector("body").addEventListener("click", (evt) => {
         return;
     }
 
+    // Handle a rebuild.
+    if (anchor.classList.contains("rebuild")) {
+        let api = 0, index = -1;
+        if ("glindex" in gCurrentShader)    { api = 1; index = gCurrentShader.glindex; }
+        if ("vkindex" in gCurrentShader)    { api = 2; index = gCurrentShader.vkindex; }
+        if ("metalindex" in gCurrentShader) { api = 3; index = gCurrentShader.metalindex; }
+        const text = getShaderRecord(gCurrentShader).text;
+        gSocket.send(`${gCurrentShader.matid} ${api} ${index} ${text}`);
+        return;
+    }
 });
 
 function fetchMaterial(matid) {
@@ -182,21 +194,56 @@ function renderMaterialDetail() {
     materialDetail.innerHTML = Mustache.render(matDetailTemplate.innerHTML, mat);
 }
 
-function selectShader(selection) {
+function getShaderRecord(selection) {
     const mat = gMaterialDatabase[gCurrentMaterial];
-    let text;
-    if (selection.glindex >= 0) text = mat.opengl[parseInt(selection.glindex)].text;
-    if (selection.vkindex >= 0) text = mat.vulkan[parseInt(selection.vkindex)].text;
-    if (selection.metalindex >= 0) text = mat.metal[parseInt(selection.metalindex)].text;
-    if (!text) {
+    if (selection.glindex >= 0) return mat.opengl[parseInt(selection.glindex)];
+    if (selection.vkindex >= 0) return mat.vulkan[parseInt(selection.vkindex)];
+    if (selection.metalindex >= 0) return mat.metal[parseInt(selection.metalindex)];
+    return null;
+}
+
+function renderShaderStatus() {
+    const shader = getShaderRecord(gCurrentShader);
+    if (shader.modified) {
+        header.innerHTML = "matdbg &nbsp; <a class='rebuild'>[rebuild]</a>";
+    } else {
+        header.innerHTML = "matdbg";
+    }
+}
+
+function selectShader(selection) {
+    const shader = getShaderRecord(selection);
+    if (!shader || !shader.text) {
         console.error("Shader source not yet available.");
         return;
     }
     gCurrentShader = selection;
     gCurrentShader.matid = gCurrentMaterial;
     renderMaterialDetail();
-    gEditor.setValue(text);
+    gEditorIsLoading = true;
+    gEditor.setValue(shader.text);
+    gEditorIsLoading = false;
     shaderSource.style.visibility = "visible";
+    renderShaderStatus();
+}
+
+function onEdit(changes) {
+    if (gEditorIsLoading) {
+        return;
+    }
+    const shader = getShaderRecord(gCurrentShader);
+    if (!shader.modified) {
+        shader.modified = true;
+        renderShaderStatus();
+    }
+    shader.text = gEditor.getValue();
+    // TODO: add diff decorations by doing:
+    //
+    //  1. Examine "changes" (IModelContentChange) to get a set of line numbers.
+    //  2. shader.decorations = gEditor.deltaDecorations(shader.decorations, ...)
+    //
+    //     https://microsoft.github.io/monaco-editor/playground.html
+    //             #interacting-with-the-editor-line-and-inline-decorations
 }
 
 function selectMaterial(matid) {
@@ -214,6 +261,7 @@ function init() {
             readOnly: false,
             minimap: { enabled: false }
         });
+        gEditor.onDidChangeModelContent((e) => { onEdit(e.changes); });
         fetchMaterials();
     });
 

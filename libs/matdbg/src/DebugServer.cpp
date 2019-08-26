@@ -24,6 +24,7 @@
 #include <spirv_glsl.hpp>
 #include <spirv-tools/libspirv.h>
 
+#include <matdbg/PackageEditor.h>
 #include <matdbg/ShaderExtractor.h>
 #include <matdbg/ShaderInfo.h>
 #include <matdbg/JsonWriter.h>
@@ -32,6 +33,7 @@
 
 #include <backend/DriverEnums.h>
 
+#include <sstream>
 #include <string>
 
 // If set to 0, this serves HTML from a resgen resource. Use 1 only during local development, which
@@ -316,7 +318,16 @@ public:
 
     bool handleData(CivetServer *server, struct mg_connection *conn, int bits, char *data,
             size_t size) override {
-        // TODO: trigger the "shader has been edited" callback via mServer->mEditHandler(...)
+        if  (size < 8) {
+            return true;
+        }
+        std::istringstream str(data);
+        std::string matid;
+        int api;
+        int index;
+        str >> matid >> api >> index;
+        const char* source = data + str.tellg();
+        mServer->applyShaderEdit(std::stoul(matid, 0, 16), api, index, source);
         return true;
     }
 
@@ -394,6 +405,39 @@ void DebugServer::addMaterial(const CString& name, const void* data, size_t size
 const DebugServer::MaterialRecord* DebugServer::getRecord(const MaterialKey& key) const {
     const auto& iter = mMaterialRecords.find(key);
     return iter == mMaterialRecords.end() ? nullptr : &iter->second;
+}
+
+bool DebugServer::applyShaderEdit(const MaterialKey& key, int api, int shader, const char* source) {
+    if (mMaterialRecords.find(key) == mMaterialRecords.end()) {
+        slog.e << "Unable to find material:" << utils::io::hex << key << utils::io::dec << io::endl;
+        return false;
+    }
+    MaterialRecord& info = mMaterialRecords[key];
+    filaflat::ChunkContainer oldPackage(info.package, info.packageSize);
+
+    // ALREADY PARSED.
+    //
+    // if (oldPackage.parse()) {
+    //     slog.e << "Unable to parse material." << io::endl;
+    //     return false;
+    // }
+
+    PackageEditor editor(oldPackage);
+    if (!editor.applyShaderEdit(api, shader, source)) {
+        slog.e << "Unable to apply edit." << io::endl;
+        return false;
+    }
+
+    delete [] info.package;
+
+    info.package = editor.getEditedPackage();
+    info.packageSize = editor.getEditedSize();
+
+    if (mEditCallback) {
+        mEditCallback(info.userdata, info.name, info.package, info.packageSize);
+    }
+
+    return true;
 }
 
 } // namespace matdbg
