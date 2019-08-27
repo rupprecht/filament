@@ -77,6 +77,9 @@ public:
     backend::Handle<backend::HwProgram> getSurfaceProgramSlow(uint8_t variantKey) const noexcept;
     backend::Handle<backend::HwProgram> getPostProcessProgramSlow(uint8_t variantKey) const noexcept;
     backend::Handle<backend::HwProgram> getProgram(uint8_t variantKey) const noexcept {
+        if (UTILS_UNLIKELY(mPendingEdits)) {
+            const_cast<FMaterial*>(this)->applyPendingEdits();
+        }
         backend::Handle<backend::HwProgram> const entry = mCachedPrograms[variantKey];
         return UTILS_LIKELY(entry) ? entry : getProgramSlow(variantKey);
     }
@@ -122,6 +125,11 @@ public:
 
     uint32_t generateMaterialInstanceId() const noexcept { return mMaterialInstanceId++; }
 
+    void applyPendingEdits() noexcept;
+
+    static void onEditCallback(void* userdata, const utils::CString& name, const void* packageData,
+            size_t packageSize);
+
 private:
     // try to order by frequency of use
     mutable std::array<backend::Handle<backend::HwProgram>, VARIANT_COUNT> mCachedPrograms;
@@ -160,6 +168,7 @@ private:
     const uint32_t mMaterialId;
     mutable uint32_t mMaterialInstanceId = 0;
     MaterialParser* mMaterialParser = nullptr;
+    MaterialParser* mPendingEdits = nullptr;
 };
 
 

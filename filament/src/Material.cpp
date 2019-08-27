@@ -450,6 +450,48 @@ size_t FMaterial::getParameters(ParameterInfo* parameters, size_t count) const n
     return count;
 }
 
+// Swaps in an edited version of the original package that was used to create the material. The
+// edited package was stashed in response to a debugger event. This is invoked only when the
+// Material Debugger is attached. The only editable features of a material package are the shader
+// source strings, so here we trigger a rebuild of the HwProgram objects.
+void FMaterial::applyPendingEdits() noexcept {
+    slog.d << "Applying edits to " << mName.c_str() << io::endl;
+    for (auto& el : mCachedPrograms) {
+        el.clear();
+    }
+    delete mMaterialParser;
+    mMaterialParser = mPendingEdits;
+    mPendingEdits = nullptr;
+}
+
+// Callback handler for the debug server, potentially called from any thread. This method is never
+// called during normal operation and exists for debugging purposes only.
+void FMaterial::onEditCallback(void* userdata, const utils::CString& name, const void* packageData,
+        size_t packageSize) {
+    FMaterial* material = upcast((Material*) userdata);
+    FEngine& engine = material->mEngine;
+
+    MaterialParser* materialParser = new MaterialParser(engine.getBackend(), packageData,
+            packageSize);
+
+    bool materialOK = materialParser->parse() && materialParser->isShadingMaterial();
+    if (!materialOK) {
+        slog.e << "Could not parse the edited package." << io::endl;
+        return;
+    }
+
+    uint32_t version;
+    materialParser->getMaterialVersion(&version);
+    if (version != MATERIAL_VERSION) {
+        slog.e << "Incorrect version number in edited package." << io::endl;
+        return;
+    }
+
+    // This is called on a web server thread so we defer clearing the program cache
+    // and swapping out the MaterialParser until the next getProgram call.
+    material->mPendingEdits = materialParser;
+}
+
 } // namespace details
 
 // ------------------------------------------------------------------------------------------------

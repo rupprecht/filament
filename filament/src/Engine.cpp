@@ -164,6 +164,7 @@ void FEngine::init() {
     // Disable the web server for regression tests that occur in hermetic environments.
     if (mBackend != backend::Backend::NOOP) {
         debug.server = new matdbg::DebugServer(matdbg::ENGINE);
+        debug.server->setEditCallback(FMaterial::onEditCallback);
     }
 #endif
 
