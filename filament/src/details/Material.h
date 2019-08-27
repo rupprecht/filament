@@ -31,6 +31,8 @@
 
 #include <utils/compiler.h>
 
+#include <atomic>
+
 
 namespace filament {
 
@@ -174,7 +176,7 @@ private:
     const uint32_t mMaterialId;
     mutable uint32_t mMaterialInstanceId = 0;
     MaterialParser* mMaterialParser = nullptr;
-    MaterialParser* mPendingEdits = nullptr;
+    std::atomic<MaterialParser*> mPendingEdits;
 };
 
 
