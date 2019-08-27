@@ -77,9 +77,11 @@ public:
     backend::Handle<backend::HwProgram> getSurfaceProgramSlow(uint8_t variantKey) const noexcept;
     backend::Handle<backend::HwProgram> getPostProcessProgramSlow(uint8_t variantKey) const noexcept;
     backend::Handle<backend::HwProgram> getProgram(uint8_t variantKey) const noexcept {
-        if (UTILS_UNLIKELY(mPendingEdits)) {
+#if FILAMENT_ENABLE_MATDBG
+        if (mPendingEdits) {
             const_cast<FMaterial*>(this)->applyPendingEdits();
         }
+#endif
         backend::Handle<backend::HwProgram> const entry = mCachedPrograms[variantKey];
         return UTILS_LIKELY(entry) ? entry : getProgramSlow(variantKey);
     }
@@ -127,8 +129,12 @@ public:
 
     void applyPendingEdits() noexcept;
 
+    void destroyPrograms(FEngine& engine);
+
     static void onEditCallback(void* userdata, const utils::CString& name, const void* packageData,
             size_t packageSize);
+
+    static MaterialParser* createParser(backend::Backend backend, const void* data, size_t size);
 
 private:
     // try to order by frequency of use
