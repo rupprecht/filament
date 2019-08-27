@@ -57,6 +57,8 @@ public:
         return (const char*) mBlobs[index].data();
     }
 
+    inline size_t getSize() const noexcept { return mBlobs.size(); }
+
 private:
     std::vector<Blob> mBlobs;
 };

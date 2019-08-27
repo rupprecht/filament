@@ -29,8 +29,9 @@ namespace filament {
 namespace matdbg {
 
 using namespace backend;
-using namespace filamat;
 using namespace filaflat;
+
+using filamat::ChunkType;
 
 ShaderEditor::ShaderEditor(Backend backend, const void* data, size_t size) :
         mBackend(backend), mOriginalPackage(data, size), mMaterialChunk(mOriginalPackage) {
@@ -72,35 +73,61 @@ bool ShaderEditor::applyShaderEdit(backend::ShaderModel shaderModel, uint8_t var
         return false;
     }
 
-    // Clone chunks.
+    // Clone all chunks except DictionaryGlsl, MaterialGlsl, etc.
     std::stringstream sstream(std::string((const char*) cc.getData(), cc.getSize()));
     std::stringstream tstream;
     {
         uint64_t type;
         uint32_t size;
         std::vector<uint8_t> content;
-
         while (sstream) {
             sstream.read((char*) &type, sizeof(type));
             sstream.read((char*) &size, sizeof(size));
             content.resize(size);
             sstream.read((char*) content.data(), size);
-
+            if (ChunkType(type) == mDictionaryTag || ChunkType(type) == mMaterialTag) {
+                continue;
+            }
             tstream.write((char*) &type, sizeof(type));
             tstream.write((char*) &size, sizeof(size));
             tstream.write((char*) content.data(), size);
         }
     }
 
+    // Write the new dictionary chunk.
+    switch (mBackend) {
+        case Backend::METAL:
+        case Backend::OPENGL: {
+            uint64_t type = mDictionaryTag;
+            uint32_t stringCount = blobDictionary.getSize();
+            tstream.write((char*) &type, sizeof(type));
+            tstream.write((char*) &stringCount, sizeof(stringCount));
+            for (uint32_t stringIndex = 0; stringIndex < stringCount; ++stringIndex) {
+                const char* line = blobDictionary.getString(stringIndex);
+                tstream.write(line, strlen(line) + 1);
+            }
+            break;
+        }
+        case Backend::VULKAN:
+        default:
+            return false;
+    }
+
+    // Write the new shaders chunk.
+    uint64_t numShaders = 0; // TODO EYEBALL
+    for (uint64_t i = 0 ; i < numShaders; i++) {
+        uint8_t shaderModelValue;
+        uint8_t variantValue;
+        uint8_t pipelineStageValue;
+        uint32_t offsetValue;
+
+        // TODO EYEBALL
+    }
+
     const size_t size = tstream.str().size();
     uint8_t* data = new uint8_t[size];
     memcpy(data, tstream.str().data(), size);
     mEditedPackage = new filaflat::ChunkContainer(data, size);
-
-    // TODO: build a new mEditedPackage:
-    //  1. Clone all chunks except mDictionaryTag and mMaterialTag
-    //  2. Create new dictionary chunk.
-    //  2. Create new material chunk.
 
     return true;
 }
