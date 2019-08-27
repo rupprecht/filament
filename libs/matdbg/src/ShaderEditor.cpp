@@ -16,15 +16,21 @@
 
 #include <matdbg/ShaderEditor.h>
 
+#include <filaflat/BlobDictionary.h>
+#include <filaflat/DictionaryReader.h>
+
 #include <backend/DriverEnums.h>
 
 #include <utils/Log.h>
+
+#include <sstream>
 
 namespace filament {
 namespace matdbg {
 
 using namespace backend;
 using namespace filamat;
+using namespace filaflat;
 
 ShaderEditor::ShaderEditor(Backend backend, const void* data, size_t size) :
         mBackend(backend), mOriginalPackage(data, size), mMaterialChunk(mOriginalPackage) {
@@ -52,19 +58,55 @@ ShaderEditor::~ShaderEditor() {
 
 bool ShaderEditor::applyShaderEdit(backend::ShaderModel shaderModel, uint8_t variant,
             backend::ShaderType stage, const char* source) {
-    utils::slog.e << "TODO: apply edit" << utils::io::endl;
+    if (!mOriginalPackage.parse()) {
+        return false;
+    }
 
-    size_t size = mOriginalPackage.getSize();
+    ChunkContainer const& cc = mOriginalPackage;
+    if (!cc.hasChunk(mMaterialTag) || !cc.hasChunk(mDictionaryTag)) {
+        return false;
+    }
+
+    BlobDictionary blobDictionary;
+    if (!DictionaryReader::unflatten(cc, mDictionaryTag, blobDictionary)) {
+        return false;
+    }
+
+    // Clone chunks.
+    std::stringstream sstream(std::string((const char*) cc.getData(), cc.getSize()));
+    std::stringstream tstream;
+    {
+        uint64_t type;
+        uint32_t size;
+        std::vector<uint8_t> content;
+
+        while (sstream) {
+            sstream.read((char*) &type, sizeof(type));
+            sstream.read((char*) &size, sizeof(size));
+            content.resize(size);
+            sstream.read((char*) content.data(), size);
+
+            tstream.write((char*) &type, sizeof(type));
+            tstream.write((char*) &size, sizeof(size));
+            tstream.write((char*) content.data(), size);
+        }
+    }
+
+    const size_t size = tstream.str().size();
     uint8_t* data = new uint8_t[size];
-    memcpy(data, mOriginalPackage.getData(), size);
+    memcpy(data, tstream.str().data(), size);
     mEditedPackage = new filaflat::ChunkContainer(data, size);
+
+    // TODO: build a new mEditedPackage:
+    //  1. Clone all chunks except mDictionaryTag and mMaterialTag
+    //  2. Create new dictionary chunk.
+    //  2. Create new material chunk.
 
     return true;
 }
 
 const uint8_t* ShaderEditor::getEditedPackage() const {
     return  (const uint8_t*) mEditedPackage->getData();
-
 }
 
 size_t ShaderEditor::getEditedSize() const {

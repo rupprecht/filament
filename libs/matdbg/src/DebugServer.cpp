@@ -434,7 +434,7 @@ bool DebugServer::applyShaderEdit(const MaterialKey& key, int api, int shader, c
             info = infos[shader];
             break;
         }
-        case backend::Backend::VULKAN:
+        case backend::Backend::VULKAN: {
             const size_t shaderCount = getShaderCount(package, ChunkType::MaterialSpirv);
             std::vector<ShaderInfo> infos(shaderCount);
             if (!getVkShaderInfo(package, infos.data())) {
@@ -442,7 +442,8 @@ bool DebugServer::applyShaderEdit(const MaterialKey& key, int api, int shader, c
             }
             info = infos[shader];
             break;
-        case backend::Backend::METAL:
+        }
+        case backend::Backend::METAL: {
             const size_t shaderCount = getShaderCount(package, ChunkType::MaterialMetal);
             std::vector<ShaderInfo> infos(shaderCount);
             if (!getMetalShaderInfo(package, infos.data())) {
@@ -450,6 +451,7 @@ bool DebugServer::applyShaderEdit(const MaterialKey& key, int api, int shader, c
             }
             info = infos[shader];
             break;
+        }
         default:
             error(__LINE__);
     }
