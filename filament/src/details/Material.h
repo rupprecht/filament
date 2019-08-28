@@ -80,7 +80,7 @@ public:
     backend::Handle<backend::HwProgram> getPostProcessProgramSlow(uint8_t variantKey) const noexcept;
     backend::Handle<backend::HwProgram> getProgram(uint8_t variantKey) const noexcept {
 #if FILAMENT_ENABLE_MATDBG
-        if (mPendingEdits) {
+        if (UTILS_UNLIKELY(mPendingEdits)) {
             const_cast<FMaterial*>(this)->applyPendingEdits();
         }
 #endif
@@ -133,6 +133,9 @@ public:
 
     void destroyPrograms(FEngine& engine);
 
+    // Callback handler for the debug server, potentially called from any thread. The userdata
+    // argument has the same value that was passed to DebugServer::addMaterial(), which should
+    // be an instance of the public-facing Material.
     static void onEditCallback(void* userdata, const utils::CString& name, const void* packageData,
             size_t packageSize);
 
